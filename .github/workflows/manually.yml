@@ -7,28 +7,28 @@ on:
         required: true
         default: 'ubuntu-latest'
       api-level:
-        description: 'API level of the platform and system image (if not overridden with system-image-api-level input) - e.g. 33, 35-ext15, Baklava'
+        description: 'API level of the platform and system image'
         required: true
         default: '34'
       system-image-api-level:
-        description: 'API level of the system image - e.g. 34-ext10, 35-ext15'
+        description: 'API level of the system image'
       target:
-        description: 'target of the system image - default, google_apis, google_apis_playstore, aosp_atd, google_atd, android-wear, android-wear-cn, android-tv, google-tv, android-automotive, android-automotive-playstore or android-desktop'
+        description: 'System image target'
         required: true
-        default: 'default'
+        default: 'google_apis'  # FIXED for better networking
       arch:
-        description: 'CPU architecture of the system image - x86, x86_64 or arm64-v8a'
+        description: 'CPU architecture'
         default: 'x86_64'
       emulator-options:
-        description: 'command-line options used when launching the emulator'
-        default: '-no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim'
+        description: 'Options for emulator launch'
+        default: '-no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -dns-server 8.8.8.8'  # DNS fix added
       emulator-build:
-        description: 'build number of a specific version of the emulator binary to use'
+        description: 'Specific emulator build number'
       channel:
-        description: 'Channel to download the SDK components from - `stable`, `beta`, `dev`, `canary`'
+        description: 'SDK channel'
         default: 'stable'
       script:
-        description: 'custom script to run - e.g. `./gradlew connectedCheck`'
+        description: 'Script to run after emulator is ready'
         required: true
         default: './gradlew connectedDebugAndroidTest'
 
@@ -40,10 +40,10 @@ jobs:
     timeout-minutes: 15
 
     steps:
-    - name: checkout
+    - name: Checkout code
       uses: actions/checkout@v4
 
-    - name: build, test and lint
+    - name: Build, test, and lint (Node)
       run: |
         npm install
         npm run build
@@ -57,15 +57,15 @@ jobs:
 
     - uses: gradle/actions/setup-gradle@v4
 
-    - name: enable KVM for linux runners
+    - name: Enable KVM for Linux
       if: runner.os == 'Linux'
       run: |
         echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
         sudo udevadm control --reload-rules
         sudo udevadm trigger --name-match=kvm
 
-    - name: launch emulator, check internet, and run tests
-      uses: ./  # your custom emulator action
+    - name: Launch emulator, test internet, and run tests
+      uses: ./  # your local custom emulator action
       with:
         api-level: ${{ github.event.inputs.api-level }}
         target: ${{ github.event.inputs.target }}
@@ -78,8 +78,15 @@ jobs:
         working-directory: ./test-fixture/
         script: |
           adb wait-for-device
+          echo "Forcing network reset..."
+          adb shell svc wifi disable
+          adb shell svc wifi enable
+          adb shell settings put global airplane_mode_on 1
+          adb shell am broadcast -a android.intent.action.AIRPLANE_MODE --ez state true
+          sleep 2
+          adb shell settings put global airplane_mode_on 0
+          adb shell am broadcast -a android.intent.action.AIRPLANE_MODE --ez state false
           echo "Checking internet connectivity from emulator..."
           adb shell ping -c 4 8.8.8.8
           echo "Running test script..."
           ${{ github.event.inputs.script }}
-
