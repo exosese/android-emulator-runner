@@ -38,7 +38,7 @@ jobs:
     env:
       JAVA_TOOL_OPTIONS: -Xmx4g
     timeout-minutes: 15
-    
+
     steps:
     - name: checkout
       uses: actions/checkout@v4
@@ -64,8 +64,8 @@ jobs:
         sudo udevadm control --reload-rules
         sudo udevadm trigger --name-match=kvm
 
-    - name: run action
-      uses: ./
+    - name: launch emulator (without running tests yet)
+      uses: ./  # your emulator action
       with:
         api-level: ${{ github.event.inputs.api-level }}
         target: ${{ github.event.inputs.target }}
@@ -76,4 +76,14 @@ jobs:
         emulator-build: ${{ github.event.inputs.emulator-build }}
         channel: ${{ github.event.inputs.channel }}
         working-directory: ./test-fixture/
-        script: ${{ github.event.inputs.script }}
+        script: echo "emulator launched"
+
+    - name: check emulator internet connection
+      run: |
+        adb wait-for-device
+        adb shell ping -c 4 8.8.8.8
+
+    - name: run tests inside emulator
+      run: |
+        adb wait-for-device
+        ${{ github.event.inputs.script }}
