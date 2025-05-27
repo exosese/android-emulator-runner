@@ -64,8 +64,8 @@ jobs:
         sudo udevadm control --reload-rules
         sudo udevadm trigger --name-match=kvm
 
-    - name: launch emulator (without running tests yet)
-      uses: ./  # your emulator action
+    - name: launch emulator, check internet, and run tests
+      uses: ./  # your custom emulator action
       with:
         api-level: ${{ github.event.inputs.api-level }}
         target: ${{ github.event.inputs.target }}
@@ -76,14 +76,10 @@ jobs:
         emulator-build: ${{ github.event.inputs.emulator-build }}
         channel: ${{ github.event.inputs.channel }}
         working-directory: ./test-fixture/
-        script: echo "emulator launched"
+        script: |
+          adb wait-for-device
+          echo "Checking internet connectivity from emulator..."
+          adb shell ping -c 4 8.8.8.8
+          echo "Running test script..."
+          ${{ github.event.inputs.script }}
 
-    - name: check emulator internet connection
-      run: |
-        adb wait-for-device
-        adb shell ping -c 4 8.8.8.8
-
-    - name: run tests inside emulator
-      run: |
-        adb wait-for-device
-        ${{ github.event.inputs.script }}
